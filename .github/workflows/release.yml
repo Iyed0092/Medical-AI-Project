@@ -1,0 +1,88 @@
+name: Release & Publish
+
+on:
+  push:
+    branches:
+      - main
+  release:
+    types: [published]
+
+env:
+  IMAGE_NAME: ghcr.io/${{ github.repository }}
+
+jobs:
+  build-and-publish:
+    name: Build and publish Docker image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        run: |
+          SHORT_SHA=$(echo "${GITHUB_SHA}" | cut -c1-7)
+          if [ -n "${{ github.event.release.tag_name }}" ]; then
+            TAG=${{ github.event.release.tag_name }}
+          else
+            TAG="sha-${SHORT_SHA}"
+          fi
+          echo "TAG=${TAG}" >> $GITHUB_OUTPUT
+          echo "SHORT_SHA=${SHORT_SHA}" >> $GITHUB_OUTPUT
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          file: ./docker/Dockerfile
+          push: true
+          tags: |
+            ${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.TAG }}
+            ${{ env.IMAGE_NAME }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Create release notes file
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          echo "Release for tag ${{ steps.meta.outputs.TAG }}" > release_notes.txt
+          echo "" >> release_notes.txt
+          git --no-pager show --format="%h %s" -n 20 >> release_notes.txt || true
+          echo "Artifacts:" >> release_notes.txt
+          echo "- Docker image: ${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.TAG }}" >> release_notes.txt
+
+  create-github-release:
+    name: Create GitHub Release (on tag/release publish)
+    runs-on: ubuntu-latest
+    needs: build-and-publish
+    if: github.event_name == 'release' || startsWith(github.ref, 'refs/tags/')
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.meta.outputs.TAG }}
+          name: Release ${{ steps.meta.outputs.TAG }}
+          body_path: release_notes.txt
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
