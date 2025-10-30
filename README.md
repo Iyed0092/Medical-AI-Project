@@ -8,6 +8,9 @@ This repository implements a modular, end-to-end machine learning pipeline for m
 The goal is to demonstrate real-world ML workflow design and model experimentation rather than perfect production stability.
 
 📂 Repository Structure
+
+``` text
+
 medical-ai-suite/
 ├─ data/                      # Raw and preprocessed datasets (X-rays, MRIs, clinical data)
 ├─ models/                    # CNN, U-Net 3D, and prognostic model definitions
@@ -29,6 +32,8 @@ medical-ai-suite/
 └─ .github/workflows/         # CI/CD automation
    ├─ ci.yml
    └─ release.yml
+
+   ```
 
 🧩 Project Components
 🩻 Imaging Models
